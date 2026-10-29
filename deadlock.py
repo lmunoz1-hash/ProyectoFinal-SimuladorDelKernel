@@ -8,31 +8,48 @@ class AdministradorDeadlock:
         self.procesos = {}
 
     def registrar(self, proceso):
+        if proceso.pid in self.procesos:
+            print(f"ERROR: PID {proceso.pid} ya registrado.")
+            return False
+
         self.procesos[proceso.pid] = proceso
+        return True
 
     def solicitar(self, pid, recurso):
         if pid not in self.procesos:
             print("ERROR: Proceso no registrado.")
             return False
 
+        proceso = self.procesos[pid]
+
+        if proceso.estado in ("ABORTADO", "TERMINADO"):
+            print(f"ERROR: PID {pid} no puede solicitar recursos.")
+            return False
+
         if recurso not in self.recursos:
             print("ERROR: Recurso inexistente.")
             return False
 
-        propietario = self.recursos[recurso]
-
-        if propietario == pid:
+        if self.recursos[recurso] == pid:
             print(f"PID {pid} ya posee recurso {recurso}.")
             return True
 
+        if pid in self.esperando:
+            print(
+                f"ERROR: PID {pid} ya espera "
+                f"recurso {self.esperando[pid]}."
+            )
+            return False
+
+        propietario = self.recursos[recurso]
+
         if propietario is None:
             self.recursos[recurso] = pid
-            self.esperando.pop(pid, None)
             print(f"PID {pid} obtiene recurso {recurso}.")
             return True
 
         self.esperando[pid] = recurso
-        self.procesos[pid].estado = "BLOQUEADO"
+        proceso.estado = "BLOQUEADO"
         print(f"PID {pid} espera recurso {recurso}.")
         return False
 
@@ -60,7 +77,13 @@ class AdministradorDeadlock:
             print("ERROR: Proceso no encontrado.")
             return False
 
-        self.procesos[pid].estado = "ABORTADO"
+        proceso = self.procesos[pid]
+
+        if proceso.estado == "ABORTADO":
+            print(f"ERROR: PID {pid} ya fue abortado.")
+            return False
+
+        proceso.estado = "ABORTADO"
         self.esperando.pop(pid, None)
 
         for recurso, propietario in self.recursos.items():

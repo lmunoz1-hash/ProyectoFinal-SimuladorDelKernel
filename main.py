@@ -73,18 +73,37 @@ def simular_deadlock(gestor):
     print("\nDeadlock simulado correctamente.")
 
 
+
 def resolver_deadlock(gestor):
     print("\n===== DETECCION Y RECUPERACION =====")
 
-    if gestor.detectar():
-        print("\nResolviendo mediante aborto del PID 202...")
-        gestor.abortar(202)
-
-        print("\nVerificando nuevamente:")
-        gestor.detectar()
-    else:
+    if not gestor.detectar():
         print("No es necesario realizar recuperacion.")
+        return
 
+    print("\nProcesos involucrados en el Deadlock:")
+
+    for pid in gestor.esperando:
+        print(f"PID {pid}")
+
+    while True:
+        pid = leer_entero_positivo(
+            "\nIngrese el PID que desea abortar: "
+        )
+
+        if pid not in gestor.esperando:
+            print(
+                "ERROR: Seleccione un proceso "
+                "involucrado en el Deadlock."
+            )
+            continue
+
+        print(f"\nResolviendo mediante aborto del PID {pid}...")
+        gestor.abortar(pid)
+        break
+
+    print("\nVerificando nuevamente:")
+    gestor.detectar()
 
 def main():
     memoria = AdministradorMemoria()

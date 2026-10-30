@@ -32,49 +32,129 @@ def leer_entero_positivo(mensaje):
             print("ERROR: Debe ingresar un numero entero.")
 
 
-def probar_semaforo():
+
+def probar_semaforo(procesos, planificador):
     print("\n===== SIMULACION DE CONCURRENCIA =====")
 
-    p1 = crear_proceso(101, 10, 5)
-    p2 = crear_proceso(102, 10, 5)
+    disponibles = [
+        p for p in procesos.values()
+        if p.estado == "LISTO"
+    ]
+
+    if len(disponibles) < 2:
+        print("ERROR: Se necesitan al menos dos procesos LISTOS.")
+        return
+
+    print("\nProcesos disponibles:")
+    for p in disponibles:
+        print(f"PID {p.pid} | Estado: {p.estado}")
+
+    pid1 = leer_entero_positivo("\nIngrese el primer PID: ")
+    pid2 = leer_entero_positivo("Ingrese el segundo PID: ")
+
+    if pid1 == pid2:
+        print("ERROR: Debe seleccionar dos procesos diferentes.")
+        return
+
+    if (
+        pid1 not in procesos
+        or pid2 not in procesos
+        or procesos[pid1].estado != "LISTO"
+        or procesos[pid2].estado != "LISTO"
+    ):
+        print("ERROR: Seleccione dos procesos LISTOS existentes.")
+        return
+
+    p1 = procesos[pid1]
+    p2 = procesos[pid2]
+
     semaforo = SemaforoBinario()
 
+    # Retirar temporalmente ambos procesos de Round Robin.
+    planificador.retirar_proceso(pid1)
+    planificador.retirar_proceso(pid2)
+
+    # Primer proceso obtiene el semaforo.
     semaforo.wait(p1)
+
+    # Segundo proceso queda bloqueado.
     semaforo.wait(p2)
 
+    # Solo el propietario puede modificar la variable.
     semaforo.modificar_variable(p1)
     semaforo.modificar_variable(p2)
 
+    # Primer proceso libera el semaforo.
     semaforo.signal(p1)
 
+    # Segundo proceso obtiene su turno.
     if semaforo.wait(p2):
         semaforo.modificar_variable(p2)
         semaforo.signal(p2)
 
+    # Ambos procesos regresan a la cola de CPU.
+    for p in (p1, p2):
+        if p.estado == "LISTO":
+            planificador.agregar_proceso(p)
+
     print("\nVariable compartida:",
           semaforo.variable_compartida)
 
+    print("Simulacion de concurrencia finalizada.")
 
-def simular_deadlock(gestor):
+
+def simular_deadlock(gestor, procesos, planificador):
     print("\n===== SIMULACION DE DEADLOCK =====")
 
-    p1 = crear_proceso(201, 10, 5)
-    p2 = crear_proceso(202, 10, 5)
+    disponibles = [
+        p for p in procesos.values()
+        if p.estado == "LISTO"
+    ]
+
+    if len(disponibles) < 2:
+        print("ERROR: Se necesitan al menos dos procesos LISTOS.")
+        return
+
+    print("\nProcesos disponibles:")
+    for p in disponibles:
+        print(f"PID {p.pid} | Estado: {p.estado}")
+
+    pid1 = leer_entero_positivo("\nIngrese el primer PID: ")
+    pid2 = leer_entero_positivo("Ingrese el segundo PID: ")
+
+    if pid1 == pid2:
+        print("ERROR: Debe seleccionar dos procesos diferentes.")
+        return
+
+    if (
+        pid1 not in procesos
+        or pid2 not in procesos
+        or procesos[pid1].estado != "LISTO"
+        or procesos[pid2].estado != "LISTO"
+    ):
+        print("ERROR: Seleccione dos procesos LISTOS existentes.")
+        return
+
+    p1 = procesos[pid1]
+    p2 = procesos[pid2]
 
     gestor.registrar(p1)
     gestor.registrar(p2)
 
-    gestor.solicitar(201, 1)
-    gestor.solicitar(202, 2)
+    gestor.solicitar(pid1, 1)
+    gestor.solicitar(pid2, 2)
 
-    gestor.solicitar(201, 2)
-    gestor.solicitar(202, 1)
+    gestor.solicitar(pid1, 2)
+    gestor.solicitar(pid2, 1)
+
+    planificador.retirar_proceso(pid1)
+    planificador.retirar_proceso(pid2)
 
     print("\nDeadlock simulado correctamente.")
+    print("Ambos procesos quedaron BLOQUEADOS.")
 
 
-
-def resolver_deadlock(gestor):
+def resolver_deadlock(gestor, procesos, memoria, planificador):
     print("\n===== DETECCION Y RECUPERACION =====")
 
     if not gestor.detectar():
@@ -99,11 +179,32 @@ def resolver_deadlock(gestor):
             continue
 
         print(f"\nResolviendo mediante aborto del PID {pid}...")
-        gestor.abortar(pid)
+
+        if not gestor.abortar(pid):
+            print("ERROR: No se pudo abortar el proceso.")
+            return
+
+        # El proceso abortado no debe volver a ejecutarse.
+        planificador.retirar_proceso(pid)
+
+        # Liberar la memoria RAM del proceso abortado.
+        if pid in memoria.procesos:
+            memoria.liberar(pid)
+
+        # Reincorporar los procesos que quedaron LISTOS.
+        for proceso in gestor.procesos.values():
+            if proceso.estado == "LISTO":
+                if not any(
+                    p.pid == proceso.pid
+                    for p in planificador.cola_listos
+                ):
+                    planificador.agregar_proceso(proceso)
+
         break
 
     print("\nVerificando nuevamente:")
     gestor.detectar()
+
 
 def main():
     memoria = AdministradorMemoria()
@@ -164,14 +265,26 @@ def main():
             memoria.mostrar_estado()
 
         elif opcion == "5":
-            probar_semaforo()
+            probar_semaforo(procesos, planificador)
 
         elif opcion == "6":
-            gestor_deadlock = AdministradorDeadlock()
-            simular_deadlock(gestor_deadlock)
+            if gestor_deadlock.detectar():
+                print("ERROR: Primero resuelva el Deadlock actual.")
+            else:
+                gestor_deadlock = AdministradorDeadlock()
+                simular_deadlock(
+                    gestor_deadlock,
+                    procesos,
+                    planificador
+                )
 
         elif opcion == "7":
-            resolver_deadlock(gestor_deadlock)
+            resolver_deadlock(
+                gestor_deadlock,
+                procesos,
+                memoria,
+                planificador
+            )
 
         elif opcion == "0":
             print("\nCerrando simulador del kernel...")

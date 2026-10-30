@@ -20,6 +20,23 @@ class PlanificadorRoundRobin:
         print(f"Proceso {proceso.pid} agregado a la cola.")
         return True
 
+    def retirar_proceso(self, pid):
+        """Retira un proceso de la cola de listos por su PID."""
+
+        cantidad_anterior = len(self.cola_listos)
+
+        self.cola_listos = deque(
+            proceso
+            for proceso in self.cola_listos
+            if proceso.pid != pid
+        )
+
+        if len(self.cola_listos) < cantidad_anterior:
+            print(f"PID {pid} retirado de la cola de CPU.")
+            return True
+
+        return False
+
     def ejecutar(self):
         if not self.cola_listos:
             print("\nNo hay procesos listos para ejecutar.")
